@@ -9,6 +9,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, Position, Size};
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+#[cfg(target_os = "macos")]
 use winit::platform::macos::{OptionAsAlt, WindowAttributesExtMacOS};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Cursor, CursorGrabMode, CursorIcon, Fullscreen, Icon, Theme, Window, WindowButtons, WindowId, WindowLevel};
@@ -31,6 +32,7 @@ pub struct WindowData {
     pub titlebar_transparent: bool,
     #[cfg(target_os = "macos")]
     pub fullsize_content_view: bool,
+    #[cfg(target_os = "macos")]
     pub has_shadow: bool,
     pub blur: bool,
     pub window_mode: WindowMode,
@@ -54,6 +56,7 @@ pub struct WindowData {
     pub accepts_first_mouse: bool,
     #[cfg(target_os = "macos")]
     pub option_as_alt: OptionAsAlt,
+    #[cfg(target_os = "macos")]
     pub disallow_hidpi: bool,
     pub content_protected: bool,
     pub parent_window: Option<RawWindowHandle>,
@@ -77,6 +80,7 @@ impl Default for WindowData {
             titlebar_transparent: false,
             #[cfg(target_os = "macos")]
             fullsize_content_view: false,
+            #[cfg(target_os = "macos")]
             has_shadow: false,
             blur: false,
             window_mode: WindowMode::WINDOW,
@@ -100,6 +104,7 @@ impl Default for WindowData {
             accepts_first_mouse: true,
             #[cfg(target_os = "macos")]
             option_as_alt: OptionAsAlt::default(),
+            #[cfg(target_os = "macos")]
             disallow_hidpi: true,
             content_protected: false,
             parent_window: None,
@@ -162,21 +167,13 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
 
         let mut window_attributes = Window::default_attributes()
             .with_title(self.window_data.title.clone())
-            .with_title_hidden(self.window_data.title_hidden)
             .with_active(self.window_data.active)
             .with_blur(self.window_data.blur)
-            .with_borderless_game(match self.window_data.window_mode {
-                WindowMode::WINDOW => false,
-                WindowMode::BORDERLESS => true,
-                WindowMode::FULLSCREEN => false,
-            })
             .with_cursor(self.window_data.cursor.clone())
             .with_content_protected(self.window_data.content_protected)
             .with_decorations(self.window_data.decorations)
-            .with_disallow_hidpi(self.window_data.disallow_hidpi)
             .with_enabled_buttons(self.window_data.enabled_buttons)
             .with_fullscreen(fullscreen_setting)
-            .with_has_shadow(self.window_data.has_shadow)
             .with_inner_size(self.window_data.size)
             .with_maximized(self.window_data.maximized)
             .with_min_inner_size(self.window_data.min_inner_size)
@@ -206,7 +203,15 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
                 .with_accepts_first_mouse(self.window_data.accepts_first_mouse)
                 .with_option_as_alt(self.window_data.option_as_alt)
                 .with_tabbing_identifier(&self.window_data.tabbing_identifier)
-                .with_movable_by_window_background(self.window_data.movable_by_window_background);
+                .with_movable_by_window_background(self.window_data.movable_by_window_background)
+                .with_title_hidden(self.window_data.title_hidden)
+                .with_borderless_game(match self.window_data.window_mode {
+                    WindowMode::WINDOW => false,
+                    WindowMode::BORDERLESS => true,
+                    WindowMode::FULLSCREEN => false,
+                })
+                .with_disallow_hidpi(self.window_data.disallow_hidpi)
+                .with_has_shadow(self.window_data.has_shadow);
         }
 
         let template = ConfigTemplateBuilder::new();
