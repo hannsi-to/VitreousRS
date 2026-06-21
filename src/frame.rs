@@ -6,7 +6,7 @@ use glutin::prelude::GlSurface;
 use glutin::surface::{Surface, WindowSurface};
 use glutin_winit::{DisplayBuilder, GlWindow};
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, Position, Size};
+use winit::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size};
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 #[cfg(target_os = "macos")]
@@ -86,12 +86,12 @@ impl Default for WindowData {
             window_mode: WindowMode::WINDOW,
             position: Position::Logical(LogicalPosition::new(0.0, 0.0)),
             size: Size::Logical(LogicalSize::new(1024.0, 768.0)),
-            min_inner_size: Size::Logical(LogicalSize::new(0.0,0.0)),
-            max_inner_size: Size::Logical(LogicalSize::new(f64::MAX,f64::MAX)),
+            min_inner_size: Size::Logical(LogicalSize::new(64.0,64.0)),
+            max_inner_size: Size::Logical(LogicalSize::new(16384.0, 16384.0)),
             decorations: true,
             transparent: false,
             resizable: true,
-            resize_increments: Size::Logical(LogicalSize::new(1.0,1.0)),
+            resize_increments: Size::Physical(PhysicalSize::new(1,1)),
             maximized: false,
             visible: true,
             always_on_top: false,
@@ -105,7 +105,7 @@ impl Default for WindowData {
             #[cfg(target_os = "macos")]
             option_as_alt: OptionAsAlt::default(),
             #[cfg(target_os = "macos")]
-            disallow_hidpi: true,
+            disallow_hidpi: false,
             content_protected: false,
             parent_window: None,
             #[cfg(target_os = "macos")]
@@ -180,12 +180,24 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
             .with_max_inner_size(self.window_data.max_inner_size)
             .with_position(self.window_data.position)
             .with_resizable(self.window_data.resizable)
-            .with_resize_increments(self.window_data.resize_increments)
             .with_theme(self.window_data.theme)
             .with_transparent(self.window_data.transparent)
             .with_visible(self.window_data.visible)
             .with_window_icon(self.window_data.window_icon.clone())
             .with_window_level(self.window_data.window_level);
+
+        match self.window_data.resize_increments {
+            Size::Physical(p_size) => {
+                if p_size.width > 1 || p_size.height > 1 {
+                    window_attributes = window_attributes.with_resize_increments(self.window_data.resize_increments);
+                }
+            }
+            Size::Logical(l_size) => {
+                if l_size.width > 1.0 || l_size.height > 1.0 {
+                    window_attributes = window_attributes.with_resize_increments(self.window_data.resize_increments);
+                }
+            }
+        }
 
         if let Some(parent_handle) = self.window_data.parent_window {
             unsafe {
