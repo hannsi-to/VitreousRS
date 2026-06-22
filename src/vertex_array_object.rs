@@ -1,4 +1,4 @@
-use gl::types::{GLboolean, GLint, GLintptr};
+use gl::types::{GLboolean, GLint, GLintptr, GLsizeiptr};
 use crate::buffer_object::MegaBufferObjectData;
 
 pub fn create_vertex_array_object(mega_buffer_object_data: &MegaBufferObjectData) -> VertexArrayObject {
@@ -51,6 +51,18 @@ impl VertexArrayObject {
 
         unsafe {
             gl::VertexArrayElementBuffer(self.id, self.mega_buffer_object_data_id);
+        }
+
+        Ok(())
+    }
+
+    pub fn bind_buffer_object(&self, mega_buffer_object_data: &MegaBufferObjectData, buffer_object_index: usize,binding_point: u32) -> Result<(), String> {
+        self.check_mega_buffer_object_data_id(mega_buffer_object_data)?;
+
+        let sub_buffer = mega_buffer_object_data.sub_buffers.get(buffer_object_index).ok_or_else(|| format!("SubBuffer idnex out bounds: specified {}, but max len is {}.", buffer_object_index, mega_buffer_object_data.sub_buffers.len()))?;
+
+        unsafe {
+            gl::BindBufferRange(sub_buffer.target,binding_point,self.mega_buffer_object_data_id,sub_buffer.offset as GLintptr,sub_buffer.size as GLsizeiptr);
         }
 
         Ok(())

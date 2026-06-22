@@ -114,7 +114,7 @@ impl MegaBufferObjectData {
 pub struct SubBuffers{
     parent_address: *mut std::ffi::c_void,
     parent_need_reallocate_ptr: *mut bool,
-    target: u32,
+    pub target: u32,
     pub offset: usize,
     pub size: usize,
     pub gap_size: usize,
@@ -212,6 +212,21 @@ impl SubBuffers{
         }
 
         self.update_memory_block(offset, f32_size);
+
+        Ok(())
+    }
+
+    pub fn put_u32(&mut self, offset: &mut usize, value: u32) -> Result<(), String> {
+        let u32_size = size_of::<u32>();
+        self.check_bounded(*offset, u32_size)?;
+
+        unsafe {
+            let raw_target_ptr = self.parent_address.add(self.offset + *offset);
+            let uint_target_ptr = raw_target_ptr as *mut u32;
+            *uint_target_ptr = value;
+        }
+
+        self.update_memory_block(offset, u32_size);
 
         Ok(())
     }

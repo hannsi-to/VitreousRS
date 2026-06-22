@@ -258,6 +258,11 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
             gl_display.get_proc_address(symbol.as_c_str()).cast()
         });
 
+        crate::draw_call::load_extensions(|name| {
+            let c_name = std::ffi::CString::new(name).unwrap();
+            gl_display.get_proc_address(c_name.as_c_str()).cast()
+        });
+
         self.window = Some(window);
         self.gl_surface = Some(gl_surface);
         self.gl_context = Some(gl_context);
