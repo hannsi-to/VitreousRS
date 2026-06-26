@@ -5,6 +5,7 @@ mod math;
 mod vertex_array_object;
 mod draw_elements_indirect_command;
 mod draw_call;
+mod logger;
 
 use std::ptr::eq;
 use gl::types::GLintptr;
@@ -108,7 +109,7 @@ impl VitreousRSHandler for TestApplicationHandler {
         sub_buffer = &mut mega_buffer.sub_buffers[2];
         write_offset = 0;
 
-        if let Err(e) =  manager.flush_to_sub_buffer(sub_buffer,&mut write_offset) {
+        if let Err(_e) =  manager.flush_to_sub_buffer(sub_buffer, &mut write_offset) {
             eprintln!("Writing data error!")
         }
 

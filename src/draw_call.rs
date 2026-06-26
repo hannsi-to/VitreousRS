@@ -16,7 +16,9 @@ pub fn load_extensions(get_proc: impl Fn(&str) -> *const std::ffi::c_void) {
     MULTI_DRAW_INDIRECT_COUNT_FN.get_or_init(|| {
         let ptr = get_proc("glMultiDrawElementsIndirectCount");
         assert!(!ptr.is_null(), "glMultiDrawElementsIndirectCount is not supported (requires OpenGL 4.6)");
-        unsafe { std::mem::transmute(ptr) }
+        unsafe {
+            std::mem::transmute(ptr)
+        }
     });
 }
 

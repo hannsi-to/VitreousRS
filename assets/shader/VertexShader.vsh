@@ -17,6 +17,14 @@ struct InstanceStruct {
     mat4 transform;
 };
 
-void main(){
+layout(std430, binding = 1) buffer ObjectStructs {
+    ObjectStruct objectStructs[];
+};
 
+layout(std430, binding = 2) buffer InstanceStructs {
+    InstanceStruct instanceStructs[];
+};
+
+void main(){
+    
 }
