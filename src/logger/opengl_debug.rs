@@ -1,27 +1,135 @@
-use crate::{debug_ln, error_ln, info_ln, warning_ln};
 use gl::types::*;
-use std::collections::HashMap;
 use std::panic;
-use crate::frame::{Application, VitreousRSHandler};
-use crate::logger::logger_manager::LoggerManager;
+use crate::logger::logger_manager::{LoggerConfig, LoggerManager};
 
-pub fn get_opengl_debug(severity_types: Vec<u32>, logger_manager: Option<&LoggerManager>) {
+#[macro_export]
+macro_rules! ext_call {
+    ($func_ptr:expr, $func_name:expr, ( $($arg:expr),* $(,)? )) => {{
+        match $func_ptr.get().and_then(|f| f.as_ref()) {
+            Some(func) => unsafe { func($($arg),*) },
+            None => {
+                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                    &format!(
+                        "Extension function '{}' is not supported. ({}:{})",
+                        $func_name, file!(), line!()
+                    )
+                );
+            }
+        }
+    }};
+
+    ($func_ptr:expr, $func_name:expr, ( $($arg:expr),* $(,)? ), fallback: $fallback:block) => {{
+        match $func_ptr.get().and_then(|f| f.as_ref()) {
+            Some(func) => unsafe { func($($arg),*) },
+            None => {
+                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                    &format!(
+                        "Extension function '{}' is not supported. ({}:{})",
+                        $func_name, file!(), line!()
+                    )
+                );
+                $fallback
+            }
+        }
+    }};
+
+    ($func_ptr:expr, $func_name:expr, ( $($arg:expr),* $(,)? ), default: $default:expr) => {{
+        match $func_ptr.get().and_then(|f| f.as_ref()) {
+            Some(func) => unsafe { func($($arg),*) },
+            None => {
+                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                    &format!(
+                        "Extension function '{}' is not supported. ({}:{})",
+                        $func_name, file!(), line!()
+                    )
+                );
+                $default
+            }
+        }
+    }};
+
+    ($func_ptr:expr, $func_name:expr, ( $($arg:expr),* $(,)? ), default: $default:expr, fallback: $fallback:block) => {{
+        match $func_ptr.get().and_then(|f| f.as_ref()) {
+            Some(func) => unsafe { func($($arg),*) },
+            None => {
+                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                    &format!(
+                        "Extension function '{}' is not supported. ({}:{})",
+                        $func_name, file!(), line!()
+                    )
+                );
+                $fallback;
+                $default
+            }
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! gl_call {
+    ($func:ident ( $($arg:expr),* $(,)? )) => {{
+        if gl::$func::is_loaded() {
+            unsafe { gl::$func($($arg),*) }
+        } else {
+            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+                "OpenGL function '{}' is not supported on this platform. ({}:{})",
+                stringify!($func), file!(), line!()
+            ));
+        }
+    }};
+
+    ($func:ident ( $($arg:expr),* $(,)? ), fallback: $fallback:block) => {{
+        if gl::$func::is_loaded() {
+            unsafe { gl::$func($($arg),*) }
+        } else {
+            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+                "OpenGL function '{}' is not supported on this platform. ({}:{})",
+                stringify!($func), file!(), line!()
+            ));
+            $fallback
+        }
+    }};
+
+    ($func:ident ( $($arg:expr),* $(,)? ), default: $default:expr) => {{
+        if gl::$func::is_loaded() {
+            unsafe { gl::$func($($arg),*) }
+        } else {
+            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+                "OpenGL function '{}' is not supported on this platform. ({}:{})",
+                stringify!($func), file!(), line!()
+            ));
+            $default
+        }
+    }};
+
+    ($func:ident ( $($arg:expr),* $(,)? ), default: $default:expr, fallback: $fallback:block) => {{
+        if gl::$func::is_loaded() {
+            unsafe { gl::$func($($arg),*) }
+        } else {
+            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+                "OpenGL function '{}' is not supported on this platform. ({}:{})",
+                stringify!($func), file!(), line!()
+            ));
+            $fallback;
+            $default
+        }
+    }};
+}
+
+pub fn get_opengl_debug(severity_types: Vec<u32>) {
     let data = Box::new(DebugCallbackData {
         severity_types,
-        logger_manager,
     });
     let user_param = Box::into_raw(data) as *mut std::ffi::c_void;
 
-    unsafe {
-        gl::Enable(gl::DEBUG_OUTPUT);
-        gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
-        gl::DebugMessageCallback(Some(debug_callback), user_param);
-    }
+    gl_call!(Enable(gl::DEBUG_OUTPUT));
+    gl_call!(Enable(gl::DEBUG_OUTPUT));
+    gl_call!(Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS));
+    gl_call!(DebugMessageCallback(Some(debug_callback), user_param));
 }
 
-struct DebugCallbackData<'a> {
+struct DebugCallbackData {
     severity_types: Vec<GLenum>,
-    logger_manager: Option<&'a LoggerManager>,
 }
 
 extern "system" fn debug_callback(
@@ -57,16 +165,16 @@ extern "system" fn debug_callback(
     );
 
     if gl_type == gl::DEBUG_TYPE_ERROR {
-        data.logger_manager.unwrap().error_logging(format!("{}", log_message).as_str());
+        LoggerManager::error_logging(format!("{}", log_message).as_str());
         panic!("OpenGL Error: {}", message);
     } else if severity == gl::DEBUG_SEVERITY_HIGH {
-        data.logger_manager.unwrap().error_logging(format!("{}", log_message).as_str());
+        LoggerManager::error_logging(format!("{}", log_message).as_str());
     } else if severity == gl::DEBUG_SEVERITY_MEDIUM {
-        data.logger_manager.unwrap().warning_logging(format!("{}", log_message).as_str());
+        LoggerManager::warning_logging(format!("{}", log_message).as_str());
     } else if severity == gl::DEBUG_SEVERITY_LOW {
-        data.logger_manager.unwrap().info_logging(format!("{}", log_message).as_str());
+        LoggerManager::info_logging(format!("{}", log_message).as_str());
     } else {
-        data.logger_manager.unwrap().debug_logging(format!("{}", log_message).as_str());
+        LoggerManager::debug_logging(format!("{}", log_message).as_str());
     }
 }
 

@@ -1,35 +1,41 @@
 use std::sync::OnceLock;
 use gl::types::{GLenum, GLintptr, GLsizei};
+use crate::{ext_call, gl_call};
+use crate::logger::logger_manager::LoggerManager;
 
 type MultiDrawElementsIndirectCountFn = unsafe extern "system" fn(
-    mode: GLenum,
-    type_: GLenum,
-    indirect: *const std::ffi::c_void,
-    drawcount: GLintptr,
+    mode:         GLenum,
+    type_:        GLenum,
+    indirect:     *const std::ffi::c_void,
+    drawcount:    GLintptr,
     maxdrawcount: GLsizei,
-    stride: GLsizei,
+    stride:       GLsizei,
 );
 
-static MULTI_DRAW_INDIRECT_COUNT_FN: OnceLock<MultiDrawElementsIndirectCountFn> = OnceLock::new();
+static MULTI_DRAW_INDIRECT_COUNT_FN: OnceLock<Option<MultiDrawElementsIndirectCountFn>> = OnceLock::new();
 
 pub fn load_extensions(get_proc: impl Fn(&str) -> *const std::ffi::c_void) {
     MULTI_DRAW_INDIRECT_COUNT_FN.get_or_init(|| {
         let ptr = get_proc("glMultiDrawElementsIndirectCount");
-        assert!(!ptr.is_null(), "glMultiDrawElementsIndirectCount is not supported (requires OpenGL 4.6)");
-        unsafe {
-            std::mem::transmute(ptr)
+        if ptr.is_null() {
+            LoggerManager::warning_logging(
+                "glMultiDrawElementsIndirectCount is not supported. (requires OpenGL 4.6)"
+            );
+            None
+        } else {
+            Some(unsafe { std::mem::transmute::<*const std::ffi::c_void, MultiDrawElementsIndirectCountFn>(ptr) })
         }
     });
 }
 
 pub enum DrawCallType {
     MultiDrawElementsIndirectCount {
-        mode: GLenum,
-        index_type: GLenum,
-        indirect_offset: GLintptr,
+        mode:             GLenum,
+        index_type:       GLenum,
+        indirect_offset:  GLintptr,
         drawcount_offset: GLintptr,
-        max_draw_count: GLsizei,
-        stride: GLsizei,
+        max_draw_count:   GLsizei,
+        stride:           GLsizei,
     },
 }
 
@@ -39,35 +45,50 @@ pub struct DrawCall {
 
 impl DrawCall {
     pub fn new(draw_call_type: DrawCallType) -> DrawCall {
-        Self {
-            draw_call_type,
-        }
+        Self { draw_call_type }
     }
 
     pub fn execute(&self) {
-        let multi_draw_fn = MULTI_DRAW_INDIRECT_COUNT_FN
-            .get()
-            .expect("draw_call::load_extensions() must be called before DrawCall::execute()");
-
-        unsafe {
-            match &self.draw_call_type {
-                DrawCallType::MultiDrawElementsIndirectCount {
-                    mode,
-                    index_type,
-                    indirect_offset,
-                    drawcount_offset,
-                    max_draw_count,
-                    stride,
-                } => {
-                    multi_draw_fn(
+        match &self.draw_call_type {
+            DrawCallType::MultiDrawElementsIndirectCount {
+                mode,
+                index_type,
+                indirect_offset,
+                drawcount_offset,
+                max_draw_count,
+                stride,
+            } => {
+                ext_call!(
+                    MULTI_DRAW_INDIRECT_COUNT_FN,
+                    "glMultiDrawElementsIndirectCount",
+                    (
                         *mode,
                         *index_type,
                         *indirect_offset as *const std::ffi::c_void,
                         *drawcount_offset,
                         *max_draw_count,
                         *stride,
-                    );
-                }
+                    ),
+                    fallback: {
+                        LoggerManager::warning_logging(
+                            "Falling back to glMultiDrawElementsIndirect."
+                        );
+                        gl_call!(
+                            MultiDrawElementsIndirect(
+                                *mode,
+                                *index_type,
+                                *indirect_offset as *const std::ffi::c_void,
+                                *max_draw_count,
+                                *stride,
+                            ),
+                            fallback: {
+                                LoggerManager::error_logging(
+                                    "MultiDrawElementsIndirect is also not supported."
+                                );
+                            }
+                        );
+                    }
+                );
             }
         }
     }

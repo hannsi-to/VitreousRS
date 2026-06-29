@@ -15,6 +15,8 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Cursor, CursorGrabMode, CursorIcon, Fullscreen, Icon, Theme, Window, WindowButtons, WindowId, WindowLevel};
 use crate::buffer_object::BufferRequest;
 use crate::color::Color;
+use crate::gl_call;
+use crate::logger::logger_manager::LoggerManager;
 use crate::logger::opengl_debug::get_opengl_debug;
 use crate::vertex_array_object::VertexArrayObject;
 use crate::vitreous_rs::VitreousRS;
@@ -264,6 +266,10 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
             gl_display.get_proc_address(symbol.as_c_str()).cast()
         });
 
+        crate::vitreous_rs::init_gl_version();
+        let (major, minor) = crate::vitreous_rs::get_gl_version();
+        LoggerManager::info_logging(&format!("OpenGL Version: {}.{}", major, minor));
+
         crate::draw_call::load_extensions(|name| {
             let c_name = std::ffi::CString::new(name).unwrap();
             gl_display.get_proc_address(c_name.as_c_str()).cast()
@@ -275,8 +281,8 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
 
         self.window.as_ref().unwrap().request_redraw();
 
-        self.vitreous_rs.logger_manager.unwrap().init();
-        get_opengl_debug(vec![gl::DEBUG_SEVERITY_NOTIFICATION,gl::DEBUG_SEVERITY_LOW,gl::DEBUG_SEVERITY_MEDIUM,gl::DEBUG_SEVERITY_HIGH],self.vitreous_rs.logger_manager);
+        LoggerManager::init();
+        get_opengl_debug(vec![gl::DEBUG_SEVERITY_NOTIFICATION,gl::DEBUG_SEVERITY_LOW,gl::DEBUG_SEVERITY_MEDIUM,gl::DEBUG_SEVERITY_HIGH]);
 
         self.vitreous_rs_handler.init();
     }
@@ -292,19 +298,15 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
                 if size.width != 0 && size.height != 0 {
                     if let (Some(surface), Some(context)) = (&self.gl_surface, &self.gl_context) {
                         surface.resize(context, NonZeroU32::new(size.width).unwrap(), NonZeroU32::new(size.height).unwrap());
-                        unsafe {
-                            gl::Viewport(0, 0, size.width as i32, size.height as i32);
-                        }
+                        gl_call!(Viewport(0, 0, size.width as i32, size.height as i32));
                     }
                 }
             }
 
             WindowEvent::RedrawRequested => {
                 if let (Some(surface), Some(context), Some(window)) = (&self.gl_surface, &self.gl_context, &self.window) {
-                    unsafe {
-                        gl::ClearColor(self.window_data.clear_color.red(), self.window_data.clear_color.green(), self.window_data.clear_color.blue(), self.window_data.clear_color.alpha());
-                        gl::Clear(gl::COLOR_BUFFER_BIT);
-                    }
+                    gl_call!(ClearColor(self.window_data.clear_color.red(), self.window_data.clear_color.green(), self.window_data.clear_color.blue(), self.window_data.clear_color.alpha()));
+                    gl_call!(Clear(gl::COLOR_BUFFER_BIT));
 
                     self.vitreous_rs_handler.render();
 

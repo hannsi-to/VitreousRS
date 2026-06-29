@@ -82,8 +82,3 @@ fn _console_write(args: fmt::Arguments, nl: bool, print_format: &str) {
         let _ = write!(std::io::stderr(), "{}{}{}", print_format, args, reset);
     }
 }
-
-fn write_log(message: &str) -> Result<(), std::io::Error> {
-
-    Ok(())
-}

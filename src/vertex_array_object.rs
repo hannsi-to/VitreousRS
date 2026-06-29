@@ -1,11 +1,10 @@
 use gl::types::{GLintptr, GLsizeiptr};
 use crate::buffer_object::MegaBufferObjectData;
+use crate::gl_call;
 
 pub fn create_vertex_array_object(mega_buffer_object_data: &MegaBufferObjectData) -> VertexArrayObject {
     let mut id: u32 = 0;
-    unsafe {
-        gl::CreateVertexArrays(1, &mut id);
-    }
+    gl_call!(CreateVertexArrays(1, &mut id));
 
     VertexArrayObject::new(id, mega_buffer_object_data.id)
 }
@@ -34,9 +33,7 @@ impl VertexArrayObject {
     }
 
     pub fn bind(&self) {
-        unsafe {
-            gl::BindVertexArray(self.id);
-        }
+        gl_call!(BindVertexArray(self.id));
     }
 
     pub fn add_vertex_buffer_object_attribute(
@@ -62,16 +59,16 @@ impl VertexArrayObject {
             ))?;
 
         unsafe {
-            gl::EnableVertexArrayAttrib(self.id, index);
-            gl::VertexArrayAttribFormat(self.id, index, size, type_, normalized, relative_offset);
-            gl::VertexArrayAttribBinding(self.id, index, binding_point);
-            gl::VertexArrayVertexBuffer(
+            gl_call!(EnableVertexArrayAttrib(self.id, index));
+            gl_call!(VertexArrayAttribFormat(self.id, index, size, type_, normalized, relative_offset));
+            gl_call!(VertexArrayAttribBinding(self.id, index, binding_point));
+            gl_call!(VertexArrayVertexBuffer(
                 self.id,
                 binding_point,
                 self.mega_buffer_object_data_id,
                 sub_buffer.offset as GLintptr,
                 stride,
-            );
+            ));
         }
 
         Ok(())
@@ -82,10 +79,8 @@ impl VertexArrayObject {
         mega_buffer_object_data: &MegaBufferObjectData,
     ) -> Result<(), String> {
         self.check_mega_buffer_object_data_id(mega_buffer_object_data)?;
-
-        unsafe {
-            gl::VertexArrayElementBuffer(self.id, self.mega_buffer_object_data_id);
-        }
+        
+        gl_call!(VertexArrayElementBuffer(self.id, self.mega_buffer_object_data_id));
 
         Ok(())
     }
@@ -105,16 +100,14 @@ impl VertexArrayObject {
                 buffer_object_index,
                 mega_buffer_object_data.sub_buffers.len()
             ))?;
-
-        unsafe {
-            gl::BindBufferRange(
-                sub_buffer.target,
-                binding_point,
-                self.mega_buffer_object_data_id,
-                sub_buffer.offset as GLintptr,
-                sub_buffer.size as GLsizeiptr,
-            );
-        }
+        
+        gl_call!(BindBufferRange(
+            sub_buffer.target,
+            binding_point,
+            self.mega_buffer_object_data_id,
+            sub_buffer.offset as GLintptr,
+            sub_buffer.size as GLsizeiptr,
+        ));
 
         Ok(())
     }

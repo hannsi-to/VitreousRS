@@ -7,8 +7,11 @@ mod draw_elements_indirect_command;
 mod draw_call;
 mod logger;
 mod vitreous_rs;
+mod shade;
+mod shader_manager;
 
 use std::ptr::eq;
+use std::sync::RwLock;
 use gl::types::GLintptr;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::keyboard::NamedKey::Control;
@@ -19,14 +22,12 @@ use crate::draw_elements_indirect_command::{DrawElementsIndirectCommand, DrawEle
 use crate::frame::{Application, VitreousRSHandler};
 use crate::logger::logger_manager::LoggerManager;
 use crate::logger::opengl_debug::get_opengl_debug;
+use crate::shader_manager::ShaderManager;
 use crate::vertex_array_object::create_vertex_array_object;
-use crate::vitreous_rs::VitreousRS;
-
-static LOGGER_MANAGER: LoggerManager = LoggerManager::default_instance();
+use crate::vitreous_rs::{VitreousRS};
 
 fn main() {
     let vitreous_rs = VitreousRS {
-        logger_manager: Some(&LOGGER_MANAGER),
         ..Default::default()
     };
 
@@ -42,7 +43,16 @@ fn main() {
 pub struct TestApplicationHandler;
 impl VitreousRSHandler for TestApplicationHandler {
     fn init(&self) {
-        LOGGER_MANAGER.debug_logging("VitreousRS: 初期化を開始します。");
+        let mut shader_manager = ShaderManager::new();
+        shader_manager.load_from_file(
+            "Shader1",
+            "assets/shader/VertexShader.vsh",
+            "assets/shader/FragmentShader.fsh",
+        ).unwrap();
+
+        shader_manager.bind("Shader1").unwrap();
+
+        LoggerManager::debug_logging("VitreousRS: 初期化を開始します。");
 
         let requests = vec![
             BufferRequest {
@@ -67,11 +77,11 @@ impl VitreousRSHandler for TestApplicationHandler {
         let mut mega_buffer = match create_buffer_object(alignment, &requests,BufferSyncMode::Coherent) {
             Ok(buffer) => buffer,
             Err(err) => {
-                LOGGER_MANAGER.error_logging(format!("メガバッファの生成に失敗しました: {}", err).as_str());
+                LoggerManager::error_logging(format!("メガバッファの生成に失敗しました: {}", err).as_str());
                 return;
             }
         };
-        LOGGER_MANAGER.debug_logging(format!("メガバッファの生成に成功しました。ID: {}", mega_buffer.id).as_str());
+        LoggerManager::debug_logging(format!("メガバッファの生成に成功しました。ID: {}", mega_buffer.id).as_str());
 
         let mut sub_buffer = &mut mega_buffer.sub_buffers[0];
 
@@ -83,16 +93,16 @@ impl VitreousRSHandler for TestApplicationHandler {
             0.5f32, -0.5f32, 0.0f32,  0.0f32, 0.0f32, 1.0f32,
         ];
 
-        LOGGER_MANAGER.debug_logging("GPU永続マップメモリへデータを直接ストリーミング中...");
+        LoggerManager::debug_logging("GPU永続マップメモリへデータを直接ストリーミング中...");
 
         for &value in &vertex_data {
             if let Err(e) = sub_buffer.put_f32(&mut write_offset, value) {
-                LOGGER_MANAGER.error_logging(format!("データ書き込みエラー: {}", e).as_str());
+                LoggerManager::error_logging(format!("データ書き込みエラー: {}", e).as_str());
                 return;
             }
         }
 
-        LOGGER_MANAGER.debug_logging(format!("書き込み完了。消費バイト数: {} bytes", write_offset).as_str());
+        LoggerManager::debug_logging(format!("書き込み完了。消費バイト数: {} bytes", write_offset).as_str());
 
         let index_data = [
             1,2,3
@@ -102,7 +112,7 @@ impl VitreousRSHandler for TestApplicationHandler {
         write_offset = 0;
         for &value in &index_data {
             if let Err(e) = sub_buffer.put_u32(&mut write_offset, value) {
-                LOGGER_MANAGER.error_logging("Writing data error!")
+                LoggerManager::error_logging("Writing data error!")
             }
         }
 
@@ -121,11 +131,11 @@ impl VitreousRSHandler for TestApplicationHandler {
         write_offset = 0;
 
         if let Err(_e) =  manager.flush_to_sub_buffer(sub_buffer, &mut write_offset) {
-            LOGGER_MANAGER.error_logging("Writing data error!")
+            LoggerManager::error_logging("Writing data error!")
         }
 
         mega_buffer.update_mega_buffer();
-        LOGGER_MANAGER.debug_logging("GPUへのメモリ同期（Flush）が完了しました。");
+        LoggerManager::debug_logging("GPUへのメモリ同期（Flush）が完了しました。");
 
         let vertex_array_object = create_vertex_array_object(&mega_buffer);
         vertex_array_object.add_vertex_buffer_object_attribute(
@@ -158,18 +168,19 @@ impl VitreousRSHandler for TestApplicationHandler {
         // DrawCall前にVAOをバインド（シーン切り替え時など）
         vertex_array_object.bind();
 
-        DrawCall::new(MultiDrawElementsIndirectCount {
-            mode: gl::TRIANGLES,
-            index_type: gl::UNSIGNED_INT,
-            indirect_offset: mega_buffer.sub_buffers[2].offset as GLintptr,
-            drawcount_offset: 0,
-            max_draw_count: 10000,
-            stride: 0,
-        }).execute();
+        // DrawCall::new(MultiDrawElementsIndirectCount {
+        //     mode: gl::TRIANGLES,
+        //     index_type: gl::UNSIGNED_INT,
+        //     indirect_offset: mega_buffer.sub_buffers[2].offset as GLintptr,
+        //     drawcount_offset: 0,
+        //     max_draw_count: 10000,
+        //     stride: 0,
+        // }).execute();
 
     }
 
     fn render(&self) {
+        // LoggerManager::debug_logging("A".repeat(100).as_str());
     }
 
     fn exit(&self) {

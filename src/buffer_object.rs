@@ -1,4 +1,5 @@
 use std::cmp::{max, min};
+use crate::gl_call;
 use crate::math::align;
 
 #[derive(Clone)]
@@ -45,14 +46,12 @@ pub fn create_buffer_object(alignment: usize, requests: &[BufferRequest], sync_m
         ),
     };
 
-    unsafe {
-        gl::CreateBuffers(1, &mut id);
-        gl::NamedBufferStorage(id, total_size as gl::types::GLsizeiptr, std::ptr::null(), storage_flags);
-        address = gl::MapNamedBufferRange(id, 0, total_size as gl::types::GLsizeiptr, access_flags);
+    gl_call!(CreateBuffers(1, &mut id));
+    gl_call!(NamedBufferStorage(id, total_size as gl::types::GLsizeiptr, std::ptr::null(), storage_flags));
+    address = gl_call!(MapNamedBufferRange(id, 0, total_size as gl::types::GLsizeiptr, access_flags),default: std::ptr::null_mut());
 
-        if address.is_null() {
-            return Err(String::from("Failed to secure memory for OpenGL."));
-        }
+    if address.is_null() {
+        return Err(String::from("Failed to secure memory for OpenGL."));
     }
 
     let mut mega_data = MegaBufferObjectData::new(id, address, total_size, alignment,sync_mode);
@@ -121,13 +120,11 @@ impl MegaBufferObjectData {
             BufferSyncMode::FlushExplicit => {
                 for sub_buffer in &mut self.sub_buffers {
                     for block in &sub_buffer.updated_memory_blocks {
-                        unsafe {
-                            gl::FlushMappedNamedBufferRange(
+                        gl_call!(FlushMappedNamedBufferRange(
                                 self.id,
                                 block.offset as gl::types::GLintptr,
                                 block.size as gl::types::GLsizeiptr,
-                            );
-                        }
+                            ));
                     }
                     sub_buffer.updated_memory_blocks.clear();
                 }
