@@ -6,33 +6,44 @@ mod vertex_array_object;
 mod draw_elements_indirect_command;
 mod draw_call;
 mod logger;
+mod vitreous_rs;
 
 use std::ptr::eq;
 use gl::types::GLintptr;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::keyboard::NamedKey::Control;
-use crate::buffer_object::{create_buffer_object, BufferRequest};
+use crate::buffer_object::{create_buffer_object, BufferRequest, BufferSyncMode};
 use crate::draw_call::{DrawCall, DrawCallType};
 use crate::draw_call::DrawCallType::MultiDrawElementsIndirectCount;
 use crate::draw_elements_indirect_command::{DrawElementsIndirectCommand, DrawElementsIndirectCommandManager};
 use crate::frame::{Application, VitreousRSHandler};
+use crate::logger::logger_manager::LoggerManager;
+use crate::logger::opengl_debug::get_opengl_debug;
 use crate::vertex_array_object::create_vertex_array_object;
+use crate::vitreous_rs::VitreousRS;
+
+static LOGGER_MANAGER: LoggerManager = LoggerManager::default_instance();
 
 fn main() {
+    let vitreous_rs = VitreousRS {
+        logger_manager: Some(&LOGGER_MANAGER),
+        ..Default::default()
+    };
+
     let window_data = frame::WindowData{
         title: String::from("Test Window"),
         ..Default::default()
     };
 
-    let mut application = Application::new(window_data, ControlFlow::Poll, TestApplicationHandler);
+    let mut application = Application::new(vitreous_rs, window_data, ControlFlow::Poll, TestApplicationHandler);
     application.run();
 }
 
 pub struct TestApplicationHandler;
 impl VitreousRSHandler for TestApplicationHandler {
     fn init(&self) {
-        println!("VitreousRS: 初期化を開始します。");
-        
+        LOGGER_MANAGER.debug_logging("VitreousRS: 初期化を開始します。");
+
         let requests = vec![
             BufferRequest {
                 target: gl::ARRAY_BUFFER,
@@ -53,14 +64,14 @@ impl VitreousRSHandler for TestApplicationHandler {
 
         let alignment = 16;
 
-        let mut mega_buffer = match create_buffer_object(alignment, &requests) {
+        let mut mega_buffer = match create_buffer_object(alignment, &requests,BufferSyncMode::Coherent) {
             Ok(buffer) => buffer,
             Err(err) => {
-                eprintln!("メガバッファの生成に失敗しました: {}", err);
+                LOGGER_MANAGER.error_logging(format!("メガバッファの生成に失敗しました: {}", err).as_str());
                 return;
             }
         };
-        println!("メガバッファの生成に成功しました。ID: {}", mega_buffer.id);
+        LOGGER_MANAGER.debug_logging(format!("メガバッファの生成に成功しました。ID: {}", mega_buffer.id).as_str());
 
         let mut sub_buffer = &mut mega_buffer.sub_buffers[0];
 
@@ -72,16 +83,16 @@ impl VitreousRSHandler for TestApplicationHandler {
             0.5f32, -0.5f32, 0.0f32,  0.0f32, 0.0f32, 1.0f32,
         ];
 
-        println!("GPU永続マップメモリへデータを直接ストリーミング中...");
+        LOGGER_MANAGER.debug_logging("GPU永続マップメモリへデータを直接ストリーミング中...");
 
         for &value in &vertex_data {
             if let Err(e) = sub_buffer.put_f32(&mut write_offset, value) {
-                eprintln!("データ書き込みエラー: {}", e);
+                LOGGER_MANAGER.error_logging(format!("データ書き込みエラー: {}", e).as_str());
                 return;
             }
         }
 
-        println!("書き込み完了。消費バイト数: {} bytes", write_offset);
+        LOGGER_MANAGER.debug_logging(format!("書き込み完了。消費バイト数: {} bytes", write_offset).as_str());
 
         let index_data = [
             1,2,3
@@ -91,7 +102,7 @@ impl VitreousRSHandler for TestApplicationHandler {
         write_offset = 0;
         for &value in &index_data {
             if let Err(e) = sub_buffer.put_u32(&mut write_offset, value) {
-                eprintln!("Writing data error!")
+                LOGGER_MANAGER.error_logging("Writing data error!")
             }
         }
 
@@ -110,14 +121,42 @@ impl VitreousRSHandler for TestApplicationHandler {
         write_offset = 0;
 
         if let Err(_e) =  manager.flush_to_sub_buffer(sub_buffer, &mut write_offset) {
-            eprintln!("Writing data error!")
+            LOGGER_MANAGER.error_logging("Writing data error!")
         }
 
         mega_buffer.update_mega_buffer();
-        println!("GPUへのメモリ同期（Flush）が完了しました。");
+        LOGGER_MANAGER.debug_logging("GPUへのメモリ同期（Flush）が完了しました。");
 
         let vertex_array_object = create_vertex_array_object(&mega_buffer);
-        // vertex_array_object.add_vertex_buffer_object_attribute(&mega_buffer,0,)
+        vertex_array_object.add_vertex_buffer_object_attribute(
+            &mega_buffer,
+            0,           // buffer_object_index（ARRAY_BUFFER）
+            0,           // binding_point
+            0,           // attribute index（position）
+            3,           // size（xyz）
+            gl::FLOAT,
+            gl::FALSE as u8,
+            (6 * size_of::<f32>()) as i32,  // stride
+            0,           // relative_offset
+        ).unwrap();
+
+        vertex_array_object.add_vertex_buffer_object_attribute(
+            &mega_buffer,
+            0,           // buffer_object_index
+            0,           // binding_point
+            1,           // attribute index（color）
+            3,           // size（rgb）
+            gl::FLOAT,
+            gl::FALSE as u8,
+            (6 * size_of::<f32>()) as i32,  // stride
+            (3 * size_of::<f32>()) as u32,  // relative_offset（xyzの後）
+        ).unwrap();
+
+        // インデックスバッファの接続
+        vertex_array_object.connect_index_buffer_object(&mega_buffer).unwrap();
+
+        // DrawCall前にVAOをバインド（シーン切り替え時など）
+        vertex_array_object.bind();
 
         DrawCall::new(MultiDrawElementsIndirectCount {
             mode: gl::TRIANGLES,
@@ -127,10 +166,10 @@ impl VitreousRSHandler for TestApplicationHandler {
             max_draw_count: 10000,
             stride: 0,
         }).execute();
+
     }
 
     fn render(&self) {
-
     }
 
     fn exit(&self) {

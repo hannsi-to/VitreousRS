@@ -13,7 +13,11 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::platform::macos::{OptionAsAlt, WindowAttributesExtMacOS};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Cursor, CursorGrabMode, CursorIcon, Fullscreen, Icon, Theme, Window, WindowButtons, WindowId, WindowLevel};
+use crate::buffer_object::BufferRequest;
 use crate::color::Color;
+use crate::logger::opengl_debug::get_opengl_debug;
+use crate::vertex_array_object::VertexArrayObject;
+use crate::vitreous_rs::VitreousRS;
 
 pub trait VitreousRSHandler{
     fn init(&self);
@@ -83,7 +87,7 @@ impl Default for WindowData {
             #[cfg(target_os = "macos")]
             has_shadow: false,
             blur: false,
-            window_mode: WindowMode::WINDOW,
+            window_mode: WindowMode::Window,
             position: Position::Logical(LogicalPosition::new(0.0, 0.0)),
             size: Size::Logical(LogicalSize::new(1024.0, 768.0)),
             min_inner_size: Size::Logical(LogicalSize::new(64.0,64.0)),
@@ -118,12 +122,13 @@ impl Default for WindowData {
 }
 
 enum WindowMode{
-    WINDOW,
-    BORDERLESS,
-    FULLSCREEN,
+    Window,
+    Borderless,
+    Fullscreen,
 }
 
 pub struct Application<H : VitreousRSHandler> {
+    pub vitreous_rs: VitreousRS,
     pub window_data: WindowData,
     pub control_flow: ControlFlow,
     pub vitreous_rs_handler: H,
@@ -133,8 +138,9 @@ pub struct Application<H : VitreousRSHandler> {
 }
 
 impl <H : VitreousRSHandler> Application<H> {
-    pub fn new(window_data: WindowData, control_flow: ControlFlow, vitreous_rs_handler: H) -> Self {
+    pub fn new(vitreous_rs: VitreousRS, window_data: WindowData, control_flow: ControlFlow, vitreous_rs_handler: H) -> Self {
         Self {
+            vitreous_rs,
             window_data,
             control_flow,
             vitreous_rs_handler,
@@ -154,9 +160,9 @@ impl <H : VitreousRSHandler> Application<H> {
 impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let fullscreen_setting = match self.window_data.window_mode {
-            WindowMode::WINDOW => None,
-            WindowMode::BORDERLESS => Some(Fullscreen::Borderless(None)),
-            WindowMode::FULLSCREEN => {
+            WindowMode::Window => None,
+            WindowMode::Borderless => Some(Fullscreen::Borderless(None)),
+            WindowMode::Fullscreen => {
                 if let Some(monitor) = event_loop.primary_monitor() {
                     monitor.video_modes().next().map(Fullscreen::Exclusive)
                 } else {
@@ -218,9 +224,9 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
                 .with_movable_by_window_background(self.window_data.movable_by_window_background)
                 .with_title_hidden(self.window_data.title_hidden)
                 .with_borderless_game(match self.window_data.window_mode {
-                    WindowMode::WINDOW => false,
-                    WindowMode::BORDERLESS => true,
-                    WindowMode::FULLSCREEN => false,
+                    WindowMode::Window => false,
+                    WindowMode::Borderless => true,
+                    WindowMode::Fullscreen => false,
                 })
                 .with_disallow_hidpi(self.window_data.disallow_hidpi)
                 .with_has_shadow(self.window_data.has_shadow);
@@ -268,6 +274,9 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
         self.gl_context = Some(gl_context);
 
         self.window.as_ref().unwrap().request_redraw();
+
+        self.vitreous_rs.logger_manager.unwrap().init();
+        get_opengl_debug(vec![gl::DEBUG_SEVERITY_NOTIFICATION,gl::DEBUG_SEVERITY_LOW,gl::DEBUG_SEVERITY_MEDIUM,gl::DEBUG_SEVERITY_HIGH],self.vitreous_rs.logger_manager);
 
         self.vitreous_rs_handler.init();
     }

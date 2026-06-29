@@ -1,13 +1,19 @@
 use std::cmp::{max, min};
 use crate::math::align;
 
+#[derive(Clone)]
+pub enum BufferSyncMode {
+    Coherent,
+    FlushExplicit,
+}
+
 pub struct BufferRequest {
     pub target: u32,
     pub requested_size: usize,
     pub requested_gap_size: usize,
 }
 
-pub fn create_buffer_object(alignment: usize, requests: &[BufferRequest]) -> Result<MegaBufferObjectData, String> {
+pub fn create_buffer_object(alignment: usize, requests: &[BufferRequest], sync_mode: BufferSyncMode,) -> Result<MegaBufferObjectData, String> {
     let mut total_size: usize = 0;
     let mut offsets: Vec<usize> = Vec::new();
     let mut actual_gaps: Vec<usize> = Vec::new();
@@ -27,8 +33,17 @@ pub fn create_buffer_object(alignment: usize, requests: &[BufferRequest]) -> Res
 
     let mut id: u32 = 0;
     let address: *mut std::ffi::c_void;
-    let storage_flags = gl::DYNAMIC_STORAGE_BIT | gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT;
-    let access_flags = gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT;
+
+    let (storage_flags, access_flags) = match sync_mode {
+        BufferSyncMode::Coherent => (
+            gl::DYNAMIC_STORAGE_BIT | gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT,
+            gl::MAP_WRITE_BIT       | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT,
+        ),
+        BufferSyncMode::FlushExplicit => (
+            gl::DYNAMIC_STORAGE_BIT | gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT,
+            gl::MAP_WRITE_BIT       | gl::MAP_PERSISTENT_BIT | gl::MAP_FLUSH_EXPLICIT_BIT,
+        ),
+    };
 
     unsafe {
         gl::CreateBuffers(1, &mut id);
@@ -40,7 +55,7 @@ pub fn create_buffer_object(alignment: usize, requests: &[BufferRequest]) -> Res
         }
     }
 
-    let mut mega_data = MegaBufferObjectData::new(id, address, total_size, alignment);
+    let mut mega_data = MegaBufferObjectData::new(id, address, total_size, alignment,sync_mode);
     for (i, req) in requests.iter().enumerate() {
         mega_data.add_sub_buffer(
             req.target,
@@ -61,14 +76,15 @@ pub struct MegaBufferObjectData {
     alignment: usize,
     pub need_reallocate: bool,
     pub sub_buffers: Vec<SubBuffers>,
-    updated_memory_block: Vec<MemoryBlock>
+    updated_memory_block: Vec<MemoryBlock>,
+    sync_mode: BufferSyncMode,
 }
 
 unsafe impl Send for MegaBufferObjectData {}
 unsafe impl Sync for MegaBufferObjectData {}
 
 impl MegaBufferObjectData {
-    pub fn new(id: u32, address: *mut std::ffi::c_void, size: usize,alignment: usize) -> MegaBufferObjectData {
+    pub fn new(id: u32, address: *mut std::ffi::c_void, size: usize,alignment: usize,sync_mode: BufferSyncMode) -> MegaBufferObjectData {
         Self {
             id,
             address,
@@ -77,6 +93,7 @@ impl MegaBufferObjectData {
             need_reallocate: false,
             sub_buffers: Vec::new(),
             updated_memory_block: Vec::new(),
+            sync_mode,
         }
     }
 
@@ -95,17 +112,26 @@ impl MegaBufferObjectData {
     }
 
     pub fn update_mega_buffer(&mut self) {
-        for sub_buffer in &mut self.sub_buffers {
-            for block in &sub_buffer.updated_memory_blocks {
-                unsafe {
-                    gl::FlushMappedNamedBufferRange(
-                        self.id,
-                        block.offset as gl::types::GLintptr,
-                        block.size as gl::types::GLsizeiptr,
-                    );
+        match self.sync_mode {
+            BufferSyncMode::Coherent => {
+                for sub_buffer in &mut self.sub_buffers {
+                    sub_buffer.updated_memory_blocks.clear();
                 }
             }
-            sub_buffer.updated_memory_blocks.clear();
+            BufferSyncMode::FlushExplicit => {
+                for sub_buffer in &mut self.sub_buffers {
+                    for block in &sub_buffer.updated_memory_blocks {
+                        unsafe {
+                            gl::FlushMappedNamedBufferRange(
+                                self.id,
+                                block.offset as gl::types::GLintptr,
+                                block.size as gl::types::GLsizeiptr,
+                            );
+                        }
+                    }
+                    sub_buffer.updated_memory_blocks.clear();
+                }
+            }
         }
     }
 }
