@@ -8,7 +8,7 @@ macro_rules! ext_call {
         match $func_ptr.get().and_then(|f| f.as_ref()) {
             Some(func) => unsafe { func($($arg),*) },
             None => {
-                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                $crate::logger::logger_manager::LoggerManager::warning_logging_ln(
                     &format!(
                         "Extension function '{}' is not supported. ({}:{})",
                         $func_name, file!(), line!()
@@ -22,7 +22,7 @@ macro_rules! ext_call {
         match $func_ptr.get().and_then(|f| f.as_ref()) {
             Some(func) => unsafe { func($($arg),*) },
             None => {
-                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                $crate::logger::logger_manager::LoggerManager::warning_logging_ln(
                     &format!(
                         "Extension function '{}' is not supported. ({}:{})",
                         $func_name, file!(), line!()
@@ -37,7 +37,7 @@ macro_rules! ext_call {
         match $func_ptr.get().and_then(|f| f.as_ref()) {
             Some(func) => unsafe { func($($arg),*) },
             None => {
-                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                $crate::logger::logger_manager::LoggerManager::warning_logging_ln(
                     &format!(
                         "Extension function '{}' is not supported. ({}:{})",
                         $func_name, file!(), line!()
@@ -52,7 +52,7 @@ macro_rules! ext_call {
         match $func_ptr.get().and_then(|f| f.as_ref()) {
             Some(func) => unsafe { func($($arg),*) },
             None => {
-                $crate::logger::logger_manager::LoggerManager::warning_logging(
+                $crate::logger::logger_manager::LoggerManager::warning_logging_ln(
                     &format!(
                         "Extension function '{}' is not supported. ({}:{})",
                         $func_name, file!(), line!()
@@ -71,7 +71,7 @@ macro_rules! gl_call {
         if gl::$func::is_loaded() {
             unsafe { gl::$func($($arg),*) }
         } else {
-            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+            $crate::logger::logger_manager::LoggerManager::warning_logging_ln(&format!(
                 "OpenGL function '{}' is not supported on this platform. ({}:{})",
                 stringify!($func), file!(), line!()
             ));
@@ -82,7 +82,7 @@ macro_rules! gl_call {
         if gl::$func::is_loaded() {
             unsafe { gl::$func($($arg),*) }
         } else {
-            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+            $crate::logger::logger_manager::LoggerManager::warning_logging_ln(&format!(
                 "OpenGL function '{}' is not supported on this platform. ({}:{})",
                 stringify!($func), file!(), line!()
             ));
@@ -94,7 +94,7 @@ macro_rules! gl_call {
         if gl::$func::is_loaded() {
             unsafe { gl::$func($($arg),*) }
         } else {
-            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+            $crate::logger::logger_manager::LoggerManager::warning_logging_ln(&format!(
                 "OpenGL function '{}' is not supported on this platform. ({}:{})",
                 stringify!($func), file!(), line!()
             ));
@@ -106,7 +106,7 @@ macro_rules! gl_call {
         if gl::$func::is_loaded() {
             unsafe { gl::$func($($arg),*) }
         } else {
-            $crate::logger::logger_manager::LoggerManager::warning_logging(&format!(
+            $crate::logger::logger_manager::LoggerManager::warning_logging_ln(&format!(
                 "OpenGL function '{}' is not supported on this platform. ({}:{})",
                 stringify!($func), file!(), line!()
             ));
@@ -165,16 +165,16 @@ extern "system" fn debug_callback(
     );
 
     if gl_type == gl::DEBUG_TYPE_ERROR {
-        LoggerManager::error_logging(format!("{}", log_message).as_str());
+        LoggerManager::error_logging_ln(format!("{}", log_message).as_str());
         panic!("OpenGL Error: {}", message);
     } else if severity == gl::DEBUG_SEVERITY_HIGH {
-        LoggerManager::error_logging(format!("{}", log_message).as_str());
+        LoggerManager::error_logging_ln(format!("{}", log_message).as_str());
     } else if severity == gl::DEBUG_SEVERITY_MEDIUM {
-        LoggerManager::warning_logging(format!("{}", log_message).as_str());
+        LoggerManager::warning_logging_ln(format!("{}", log_message).as_str());
     } else if severity == gl::DEBUG_SEVERITY_LOW {
-        LoggerManager::info_logging(format!("{}", log_message).as_str());
+        LoggerManager::info_logging_ln(format!("{}", log_message).as_str());
     } else {
-        LoggerManager::debug_logging(format!("{}", log_message).as_str());
+        LoggerManager::debug_logging_ln(format!("{}", log_message).as_str());
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::vitreous_rs::{API_NAME, DEFAULT_PROJECT_NAME};
-use crate::{debug_ln, error_ln, info_ln, warning_ln};
+use crate::{debug, debug_ln, error, error_ln, info, info_ln, warning, warning_ln};
 use backtrace::Backtrace;
 use chrono::Local;
 use std::cell::RefCell;
@@ -11,7 +11,7 @@ use std::sync::{OnceLock, RwLock};
 use std::{fs, panic};
 
 static COUNTER: AtomicI32 = AtomicI32::new(1);
-static IS_INITIALIZED: AtomicBool = AtomicBool::new(false);
+static IS_FIRST_WRITE: AtomicBool = AtomicBool::new(true);
 static CREATE_TIME: OnceLock<String> = OnceLock::new();
 thread_local! {
     static PANIC_LOGGER: RefCell<Option<Box<dyn Fn(&str)>>> = RefCell::new(None);
@@ -77,58 +77,15 @@ impl LoggerManager {
     }
 
     pub fn init() {
-        CREATE_TIME.get_or_init(|| Local::now().format("%Y-%m-%d").to_string());
+        CREATE_TIME.get_or_init(|| Local::now().format("%Y-%m-%d_%H-%M-%S").to_string());
 
-        Self::sync_counter();
         Self::setup_panic_hook();
-    }
-
-    fn sync_counter() {
-        if IS_INITIALIZED
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
-            return;
-        }
-
-        let config = LOGGER_MANAGER.read().unwrap();
-        let date = CREATE_TIME.get().map(|s| s.as_str()).unwrap_or("");
-        let mut number = 1;
-
-        loop {
-            let mut path = PathBuf::from(config.log_file_path);
-            path.push(
-                format!(
-                    "{}_{}_{}_({}).log",
-                    config.project_name, API_NAME, date, number
-                )
-                .replace(" ", "_"),
-            );
-
-            if !path.exists() {
-                let target = if number > 1 { number - 1 } else { 1 };
-                COUNTER.store(target, Ordering::SeqCst);
-                break;
-            }
-
-            let Ok(metadata) = fs::metadata(&path) else {
-                break;
-            };
-
-            if metadata.len() < config.max_file_size {
-                COUNTER.store(number, Ordering::SeqCst);
-                break;
-            }
-
-            number += 1;
-        }
     }
 
     pub fn setup_panic_hook() {
         PANIC_LOGGER.with(|logger| {
             *logger.borrow_mut() = Some(Box::new(|message| {
-                use std::io::Write;
-                let _ = writeln!(std::io::stderr(), "{}", message);
+                LoggerManager::error_logging_ln(message);
             }));
         });
 
@@ -228,30 +185,6 @@ impl LoggerManager {
                     log_fn(&formatted);
                 }
             });
-
-            if let Ok(config) = LOGGER_MANAGER.try_read() {
-                let dir = Path::new(config.log_file_path);
-                if dir.exists() || fs::create_dir_all(dir).is_ok() {
-                    let date = CREATE_TIME.get().map(|s| s.as_str()).unwrap_or("unknown");
-                    let mut path = PathBuf::from(config.log_file_path);
-                    path.push(
-                        format!(
-                            "{}_{}_{}_({}).log",
-                            config.project_name,
-                            API_NAME,
-                            date,
-                            COUNTER.load(Ordering::SeqCst)
-                        )
-                        .replace(" ", "_"),
-                    );
-
-                    if let Ok(mut file) =
-                        fs::OpenOptions::new().append(true).create(true).open(&path)
-                    {
-                        let _ = writeln!(file, "{}", formatted);
-                    }
-                }
-            }
         }));
     }
 
@@ -271,32 +204,62 @@ impl LoggerManager {
         Self::logging(LogLevel::Error, message);
     }
 
-    pub fn logging(log_level: LogLevel, message: &str) {
-        Self::logging_with_write(log_level, message, true);
+    pub fn debug_logging_ln(message: &str) {
+        Self::logging_ln(LogLevel::Debug, message);
     }
 
-    pub fn logging_with_write(log_level: LogLevel, message: &str, write_log_file: bool) {
+    pub fn info_logging_ln(message: &str) {
+        Self::logging_ln(LogLevel::Info, message);
+    }
+
+    pub fn warning_logging_ln(message: &str) {
+        Self::logging_ln(LogLevel::Warning, message);
+    }
+
+    pub fn error_logging_ln(message: &str) {
+        Self::logging_ln(LogLevel::Error, message);
+    }
+
+    pub fn logging(log_level: LogLevel, message: &str) {
+        Self::logging_with_write(log_level, message, true,false);
+    }
+
+    pub fn logging_ln(log_level: LogLevel, message: &str) {
+        Self::logging_with_write(log_level, message, true,true);
+    }
+
+    pub fn logging_with_write(log_level: LogLevel, message: &str, write_log_file: bool,nl: bool) {
         let logging_text = Self::format_message(log_level, message);
 
-        match log_level {
-            LogLevel::Debug => debug_ln!("{}", logging_text),
-            LogLevel::Info => info_ln!("{}", logging_text),
-            LogLevel::Warning => warning_ln!("{}", logging_text),
-            LogLevel::Error => error_ln!("{}", logging_text),
+        if nl {
+            match log_level {
+                LogLevel::Debug => debug_ln!("{}", logging_text),
+                LogLevel::Info => info_ln!("{}", logging_text),
+                LogLevel::Warning => warning_ln!("{}", logging_text),
+                LogLevel::Error => error_ln!("{}", logging_text),
+            }
+        }else {
+            match log_level {
+                LogLevel::Debug => debug!("{}", logging_text),
+                LogLevel::Info => info!("{}", logging_text),
+                LogLevel::Warning => warning!("{}", logging_text),
+                LogLevel::Error => error!("{}", logging_text),
+            }
         }
 
         if write_log_file {
-            if let Err(e) = Self::write_to_file(&logging_text) {
+            if let Err(e) = Self::write_to_file(&logging_text,nl) {
                 Self::logging_with_write(
                     LogLevel::Error,
                     &format!("Unable to write to the log file. {}", e),
                     false,
+                    true,
                 );
             }
         }
     }
 
-    fn write_to_file(message: &str) -> Result<(), std::io::Error> {
+    fn write_to_file(message: &str, nl: bool) -> Result<(), std::io::Error> {
         let config = LOGGER_MANAGER.read().unwrap();
         let dir = Path::new(config.log_file_path);
 
@@ -306,12 +269,28 @@ impl LoggerManager {
 
         let path = Self::get_log_file_path(&config)?;
 
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&path)?;
+        let mut file = if IS_FIRST_WRITE.compare_exchange(
+            true, false,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ).is_ok() {
+            fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&path)?
+        } else {
+            fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(&path)?
+        };
 
-        writeln!(file, "{}", message)?;
+        if nl {
+            writeln!(file, "{}", message)?;
+        }else{
+            write!(file, "{}", message)?;
+        }
         Ok(())
     }
 

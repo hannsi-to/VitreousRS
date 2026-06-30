@@ -77,8 +77,14 @@ fn _console_write(args: fmt::Arguments, nl: bool, print_format: &str) {
     use std::io::Write;
     let reset = ANSIFormat::Reset.code();
     if nl {
-        let _ = writeln!(std::io::stderr(), "{}{}{}", print_format, args, reset);
+        let stderr = std::io::stderr();
+        let mut handle = stderr.lock();
+        let _ = writeln!(handle, "{}{}{}", print_format, args, reset);
+        let _ = handle.flush();
     } else {
-        let _ = write!(std::io::stderr(), "{}{}{}", print_format, args, reset);
+        let stderr = std::io::stderr();
+        let mut handle = stderr.lock();
+        let _ = write!(handle, "{}{}{}", print_format, args, reset);
+        let _ = handle.flush();
     }
 }

@@ -85,6 +85,17 @@ impl VertexArrayObject {
         Ok(())
     }
 
+    pub fn bind_draw_indirect_buffer(
+        &self,
+        mega_buffer_object_data: &MegaBufferObjectData,
+    ) -> Result<(), String> {
+        self.check_mega_buffer_object_data_id(mega_buffer_object_data)?;
+
+        gl_call!(BindBuffer(gl::DRAW_INDIRECT_BUFFER,self.mega_buffer_object_data_id));
+
+        Ok(())
+    }
+
     pub fn bind_buffer_object(
         &self,
         mega_buffer_object_data: &MegaBufferObjectData,

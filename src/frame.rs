@@ -22,7 +22,7 @@ use crate::vertex_array_object::VertexArrayObject;
 use crate::vitreous_rs::VitreousRS;
 
 pub trait VitreousRSHandler{
-    fn init(&self);
+    fn init(&mut self);
     fn render(&self);
     fn exit(&self);
 }
@@ -161,6 +161,8 @@ impl <H : VitreousRSHandler> Application<H> {
 
 impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        LoggerManager::init();
+
         let fullscreen_setting = match self.window_data.window_mode {
             WindowMode::Window => None,
             WindowMode::Borderless => Some(Fullscreen::Borderless(None)),
@@ -268,7 +270,7 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
 
         crate::vitreous_rs::init_gl_version();
         let (major, minor) = crate::vitreous_rs::get_gl_version();
-        LoggerManager::info_logging(&format!("OpenGL Version: {}.{}", major, minor));
+        LoggerManager::info_logging_ln(&format!("OpenGL Version: {}.{}", major, minor));
 
         crate::draw_call::load_extensions(|name| {
             let c_name = std::ffi::CString::new(name).unwrap();
@@ -281,7 +283,6 @@ impl<H : VitreousRSHandler> ApplicationHandler for Application<H> {
 
         self.window.as_ref().unwrap().request_redraw();
 
-        LoggerManager::init();
         get_opengl_debug(vec![gl::DEBUG_SEVERITY_NOTIFICATION,gl::DEBUG_SEVERITY_LOW,gl::DEBUG_SEVERITY_MEDIUM,gl::DEBUG_SEVERITY_HIGH]);
 
         self.vitreous_rs_handler.init();

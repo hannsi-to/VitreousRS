@@ -46,7 +46,7 @@ impl ShaderProgram {
             gl_call!(DetachShader(id, shader.id));
         }
 
-        LoggerManager::debug_logging(
+        LoggerManager::debug_logging_ln(
             &format!("Shader program linked successfully. (ID: {})", id)
         );
 
@@ -114,7 +114,7 @@ impl ShaderProgram {
 impl Drop for ShaderProgram {
     fn drop(&mut self) {
         gl_call!(DeleteProgram(self.id));
-        LoggerManager::debug_logging(
+        LoggerManager::debug_logging_ln(
             &format!("Shader program deleted. (ID: {})", self.id)
         );
     }
@@ -142,7 +142,7 @@ impl ShaderManager {
         let program  = ShaderProgram::new(&[&vertex, &fragment])?;
 
         self.programs.insert(name.to_string(), program);
-        LoggerManager::info_logging(&format!("Shader '{}' loaded.", name));
+        LoggerManager::info_logging_ln(&format!("Shader '{}' loaded.", name));
 
         Ok(())
     }
@@ -158,7 +158,7 @@ impl ShaderManager {
         let program  = ShaderProgram::new(&[&vertex, &fragment])?;
 
         self.programs.insert(name.to_string(), program);
-        LoggerManager::info_logging(
+        LoggerManager::info_logging_ln(
             &format!("Shader '{}' loaded from files. (vert: {}, frag: {})",
                      name, vertex_path, fragment_path)
         );
@@ -182,7 +182,7 @@ impl ShaderManager {
 
     pub fn remove(&mut self, name: &str) {
         if self.programs.remove(name).is_some() {
-            LoggerManager::info_logging(&format!("Shader '{}' removed.", name));
+            LoggerManager::info_logging_ln(&format!("Shader '{}' removed.", name));
         }
     }
 }

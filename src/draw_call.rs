@@ -18,7 +18,7 @@ pub fn load_extensions(get_proc: impl Fn(&str) -> *const std::ffi::c_void) {
     MULTI_DRAW_INDIRECT_COUNT_FN.get_or_init(|| {
         let ptr = get_proc("glMultiDrawElementsIndirectCount");
         if ptr.is_null() {
-            LoggerManager::warning_logging(
+            LoggerManager::warning_logging_ln(
                 "glMultiDrawElementsIndirectCount is not supported. (requires OpenGL 4.6)"
             );
             None
@@ -36,6 +36,14 @@ pub enum DrawCallType {
         drawcount_offset: GLintptr,
         max_draw_count:   GLsizei,
         stride:           GLsizei,
+    },
+
+    MultiDrawElementsIndirect {
+        mode:            GLenum,
+        index_type:      GLenum,
+        indirect_offset: GLintptr,
+        draw_count:      GLsizei,
+        stride:          GLsizei,
     },
 }
 
@@ -70,7 +78,7 @@ impl DrawCall {
                         *stride,
                     ),
                     fallback: {
-                        LoggerManager::warning_logging(
+                        LoggerManager::warning_logging_ln(
                             "Falling back to glMultiDrawElementsIndirect."
                         );
                         gl_call!(
@@ -82,12 +90,30 @@ impl DrawCall {
                                 *stride,
                             ),
                             fallback: {
-                                LoggerManager::error_logging(
+                                LoggerManager::error_logging_ln(
                                     "MultiDrawElementsIndirect is also not supported."
                                 );
                             }
                         );
                     }
+                );
+            }
+
+            DrawCallType::MultiDrawElementsIndirect {
+                mode,
+                index_type,
+                indirect_offset,
+                draw_count,
+                stride,
+            } => {
+                gl_call!(
+                    MultiDrawElementsIndirect(
+                        *mode,
+                        *index_type,
+                        *indirect_offset as *const std::ffi::c_void,
+                        *draw_count,
+                        *stride,
+                    )
                 );
             }
         }
