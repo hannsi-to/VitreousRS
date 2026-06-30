@@ -9,9 +9,12 @@ mod logger;
 mod vitreous_rs;
 mod shade;
 mod shader_manager;
+mod object;
+mod vertex;
 
 use std::sync::RwLock;
 use gl::types::{GLintptr, GLsizei};
+use glam::{vec3, Mat4};
 use winit::event_loop::ControlFlow;
 use crate::buffer_object::{create_buffer_object, BufferRequest, BufferSyncMode, MegaBufferObjectData};
 use crate::draw_call::{DrawCall, DrawCallType};
